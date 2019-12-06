@@ -1,0 +1,308 @@
+---
+title: "Sentiment Analysis for Blogs - R Notebook"
+output: html_notebook
+---
+
+#Analysis of "joe-rogans-secret-to-success-strategic-quitting " blog from www.goalcast.com 
+
+
+Loading the required packages
+
+```{r}
+library("SnowballC")
+library("tm")
+library("syuzhet")
+library("rvest")
+library("sentimentr")
+library("SnowballC")
+library("twitteR")
+library(sentiment)
+
+```
+
+
+Before you extract the URL from the any website, do follow the below steps,
+
+1) Open https://www.google.com/chrome/
+
+2) Click on extensions or directly open https://chrome.google.com/webstore/category/extensions?h1=en
+
+3) Type Selector Gadget in search or directly open
+https://chrome.google.com/webstore/detail/selectorgadget/mhjhnkcfbdhnjickkkdbjoemdmbfginb?h1=en
+
+4) Bookmark it and Add this extension to chrome, enable it if it shows any prompt
+
+5) Now open any website from where you wanted to extract the text data from.
+
+6) Once you open the website and open any article in it, you should be able to see the extension "Selector Gadget" in chrome       
+(magnifying glass icon) and click on various lines in the article until you see yellow color on the web page, once you see yellow color below click on Xpath and copy and the paste the link below in the code near Xpath.
+
+
+
+```{r}
+url <- 'https://www.goalcast.com/2019/10/09/joe-rogans-secret-to-success-strategic-quitting/'
+Blog <- read_html(url)
+Blog <- html_nodes(Blog, xpath = "//p")
+Blogtext <- html_text(Blog)
+Blogtext
+typeof(Blogtext)
+
+```
+
+```{r}
+
+some_txt <- Blogtext
+
+
+#REMOVE PEOPLE
+some_txt=gsub("@\\W","",some_txt)
+
+#REMOVE PUNCT
+
+some_txt=gsub("[[:punct:]]","",some_txt)
+
+#remove numbers
+some_txt=gsub("[[:digit:]]","",some_txt)
+
+#remove links
+some_txt=gsub("http\\w+","",some_txt)
+
+#remove unnecesary spaces
+
+some_txt=gsub("[ \t]{2,}","",some_txt)
+some_txt=gsub("^\\s+|\\s+$","",some_txt)
+
+
+#define lowererror hancling function()
+
+try.error=function(x)
+{ #CREATE MISSING VALUE
+  y=NA
+  #TRY CTACH ERROR
+  try.error=tryCatch()
+  
+}
+
+try.error=function(x)
+{ #CREATE MISSING VALUE
+  y=NA
+  #TRY CTACH ERROR
+  try.error=tryCatch(tolower(x), error=function(e) e)
+  #if not an error
+  if(!inherits(try.error,"error"))
+    y=tolower(x)
+  #result
+  return(y)
+  
+}
+
+
+head(some_txt)
+
+some_txt=sapply(some_txt, try.error)
+
+#REMOVE NA's in some_txt
+some_txt=some_txt[!is.na(some_txt)]
+names(some_txt) = NULL
+```
+
+
+
+Perform sentiment analysis
+
+```{r}
+library(sentiment)
+library(Rstem)
+library(tm)
+library(devtools)
+library(sentiment)
+
+#CLASSIFY EMOTION
+class_emo=classify_emotion(some_txt, algorithm = "bayes", prior=1.0)
+
+#get emotion best fit
+emotion=class_emo[,7]
+
+#substitute NA's by unknown
+# classify emotion
+class_emo = classify_emotion(some_txt, algorithm="bayes", prior=1.0)
+# get emotion best fit
+emotion = class_emo[,7]
+# substitute NA's by "unknown"
+emotion[is.na(emotion)] = "unknown"
+
+# classify polarity
+class_pol = classify_polarity(some_txt, algorithm="bayes")
+# get polarity best fit
+polarity = class_pol[,4]
+
+
+#Create data frame with the results and obtain some general statistics
+
+# data frame with results
+sent_df = data.frame(text=some_txt, emotion=emotion,
+                     polarity=polarity, stringsAsFactors=FALSE)
+
+# sort data frame
+sent_df = within(sent_df,
+                 emotion <- factor(emotion, levels=names(sort(table(emotion), decreasing=TRUE))))
+
+#Let's do some plots of the obtained results
+# plot distribution of emotions
+# plot distribution of emotions
+
+ggplot(sent_df, aes(x=emotion)) +
+  geom_bar(aes(y=..count.., fill=emotion)) +
+  scale_fill_brewer(palette="Dark2") +
+  labs(x="emotion categories", y="number of tweets")
+
+```
+
+
+From the above graph, it is clear that joe-rogans-secret-to-success-strategic-quitting blog has more unknown emotions as highest and the next followed by Joy emotion.
+
+
+```{r}
+# plot distribution of polarity
+
+ggplot(sent_df, aes(x=polarity)) +
+  geom_bar(aes(y=..count.., fill=polarity)) +
+  scale_fill_brewer(palette="RdGy") +
+  labs(x="polarity categories", y="number of tweets")
+
+```
+
+
+Conclusion: From the above graph, it is clear that joe-rogans-secret-to-success-strategic-quitting blog has more positive polarity.
+
+
+```{r}
+#Separate the text by emotions and visualize the words with a comparison cloud
+# separating text by emotion
+emos = levels(factor(sent_df$emotion))
+nemo = length(emos)
+emo.docs = rep("", nemo)
+for (i in 1:nemo)
+{
+  tmp = some_txt[emotion == emos[i]]
+  emo.docs[i] = paste(tmp, collapse=" ")
+}
+
+# remove stopwords
+emo.docs = removeWords(emo.docs, stopwords("english"))
+# create corpus
+corpus = Corpus(VectorSource(emo.docs))
+#error
+tdm = TermDocumentMatrix(corpus)
+
+#Error in tolower(txt)
+tdm = as.matrix(tdm)
+colnames(tdm) = emos
+
+# comparison word cloud
+comparison.cloud(tdm, colors = brewer.pal(nemo, "Dark2"),
+                 scale = c(3,.5), random.order = FALSE, title.size = 1.5)
+```
+
+
+#Lets Analyse which are positive and negative tweets and which are highest in number
+
+```{r}
+#converting character into dataframe
+test.vector <- as.data.frame((Blogtext))
+df<-test.vector
+class(df)
+
+names(df)[1]<-"text"
+colnames(df)
+
+
+```
+
+
+```{r}
+#cleaning the dataframe
+
+tweets.df2 <- gsub("http.*","", df$text)
+
+word.df <- as.vector(tweets.df2)
+emotion.df <- get_nrc_sentiment(word.df)
+emotion.df2 <- cbind(tweets.df2, emotion.df) 
+
+
+```
+
+
+```{r}
+#finding the sentiment
+
+sent.value <- get_sentiment(word.df)
+most.positive <- word.df[sent.value == max(sent.value)]
+most.positive
+
+
+```
+
+
+```{r}
+most.negative <- word.df[sent.value <= min(sent.value)] 
+most.negative 
+
+
+```
+
+
+```{r}
+sent.value
+
+```
+
+
+```{r}
+#Identifying the most positive lines
+positive.tweets <- word.df[sent.value > 0]
+head(positive.tweets)
+
+```
+
+```{r}
+#Identifying the most negative lines
+negative.tweets <- word.df[sent.value < 0]
+head(negative.tweets)
+
+```
+
+
+```{r}
+#Identifying the neutral lines
+neutral.tweets <- word.df[sent.value == 0]
+head(neutral.tweets)
+
+```
+
+
+```{r}
+category_senti <- ifelse(sent.value < 0, "Negative", ifelse(sent.value > 0, "Positive", "Neutral"))
+
+senti_graph<-table(category_senti)
+senti_graph
+
+```
+
+```{r}
+
+#plotting the graph positive,negative,neutral
+barplot(senti_graph,main="Success_Blog",col=c("darkblue","yellow","red"))
+
+```
+
+From the above graph, it is clear that joe-rogans-secret-to-success-strategic-quitting blog has more positive Tweets.
+
+
+THANK YOU
+
+
+
+
+
+
